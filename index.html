@@ -18,17 +18,6 @@
 }
 html,body{width:100%;min-height:100vh;background:#2a1f0e;font-family:'Gowun Dodum','Crimson Pro',sans-serif;overflow-x:hidden}
 
-/* ── AMBIENT SOUND BUTTON ── */
-#sound-btn{
-  position:fixed;top:16px;right:16px;z-index:1000;
-  background:rgba(245,240,232,0.92);border:1.5px solid var(--brown);
-  color:var(--brown);font-family:'Gowun Dodum','Crimson Pro',sans-serif;font-size:13px;
-  padding:6px 14px;cursor:pointer;border-radius:2px;
-  display:flex;align-items:center;gap:6px;letter-spacing:.5px;
-  transition:background .2s;
-}
-#sound-btn:hover{background:#f5f0e8}
-#sound-btn .icon{font-size:16px}
 
 /* ── NAV BAR ── */
 #navbar{
@@ -104,7 +93,9 @@ html,body{width:100%;min-height:100vh;background:#2a1f0e;font-family:'Gowun Dodu
 
 /* ── COLUMNS ── */
 .cols{display:grid;margin:0 18px;gap:0}
-.cols-3{grid-template-columns:1fr .5px 1fr .5px 1fr}
+.cols-3{grid-template-columns:1fr .5px 1fr}
+.cols-3>.col-div:nth-child(4){display:none}
+.cols-3>.col:nth-child(5){grid-column:1/-1;border-top:.5px solid var(--line)}
 .cols-2{grid-template-columns:1.35fr .5px 1fr}
 .cols-2r{grid-template-columns:1fr .5px 1.35fr}
 .col-div{border-left:.5px solid var(--line);margin:0}
@@ -215,11 +206,6 @@ html,body{width:100%;min-height:100vh;background:#2a1f0e;font-family:'Gowun Dodu
 </style>
 </head>
 <body>
-
-<button id="sound-btn" onclick="toggleSound()">
-  <span class="icon" id="sound-icon">♪</span>
-  <span id="sound-label">환경음 켜기</span>
-</button>
 
 <nav id="navbar">
   <div class="nav-item active" onclick="goPage(0)">
@@ -1269,102 +1255,6 @@ document.addEventListener('keydown', e=>{
   if(e.key==='ArrowRight'||e.key==='ArrowDown') goPage(Math.min(currentPage+1,totalPages-1));
   if(e.key==='ArrowLeft'||e.key==='ArrowUp')   goPage(Math.max(currentPage-1,0));
 });
-
-// ── WEB AUDIO AMBIENT SOUND ──
-let audioCtx = null;
-let soundOn = false;
-let gainNode = null;
-let bufferSource = null;
-let soundNodes = [];
-
-function createWindSound(ctx){
-  const bufSize = ctx.sampleRate * 4;
-  const buf = ctx.createBuffer(2, bufSize, ctx.sampleRate);
-  for(let c=0;c<2;c++){
-    const data = buf.getChannelData(c);
-    let lastOut=0;
-    for(let i=0;i<bufSize;i++){
-      const white = Math.random()*2-1;
-      lastOut = (lastOut + 0.02*white)/1.02;
-      data[i] = lastOut * 3.5;
-    }
-  }
-  return buf;
-}
-
-function createFlagFlap(ctx){
-  const dur = 2;
-  const buf = ctx.createBuffer(1, ctx.sampleRate*dur, ctx.sampleRate);
-  const data = buf.getChannelData(0);
-  for(let i=0;i<data.length;i++){
-    const t = i/ctx.sampleRate;
-    const env = Math.sin(Math.PI*t/dur);
-    const noise = (Math.random()*2-1)*0.08;
-    const flap = Math.sin(2*Math.PI*6*t)*0.04*Math.random();
-    data[i] = (noise+flap)*env;
-  }
-  return buf;
-}
-
-const BGM_N={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
-function bgmHz(n,o){return 440*Math.pow(2,(BGM_N[n]+(o-4)*12-9)/12)}
-function bgmNote(ctx,out,verb,f,t,dur,vel,bright){
-  const g=ctx.createGain();g.gain.setValueAtTime(0,t);
-  g.gain.linearRampToValueAtTime(vel,t+.008);
-  g.gain.exponentialRampToValueAtTime(vel*.35,t+.35);
-  g.gain.exponentialRampToValueAtTime(.0008,t+dur);
-  const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=bright;
-  [[1,1],[2,.35],[3,.12],[4,.05]].forEach(([m,a],i)=>{
-    const o=ctx.createOscillator();o.type=i?'sine':'triangle';o.frequency.value=f*m;o.detune.value=(Math.random()-.5)*5;
-    const og=ctx.createGain();og.gain.value=a;o.connect(og);og.connect(lp);o.start(t);o.stop(t+dur+.1)});
-  lp.connect(g);g.connect(out);g.connect(verb);
-}
-
-// 피아노 BGM — "신나는 트레킹": F–G–Em–Am, 140bpm 16분음표 아르페지오
-function startSound(){
-  const ctx = new (window.AudioContext||window.webkitAudioContext)();
-  audioCtx = ctx;
-  if(ctx.state==='suspended') ctx.resume();
-  try{const sb=ctx.createBuffer(1,1,22050),ss=ctx.createBufferSource();ss.buffer=sb;ss.connect(ctx.destination);ss.start(0)}catch(e){}
-  gainNode = ctx.createGain();
-  gainNode.gain.setValueAtTime(0,ctx.currentTime);
-  gainNode.gain.linearRampToValueAtTime(0.6,ctx.currentTime+1.5);
-  gainNode.connect(ctx.destination);
-  const len=ctx.sampleRate*2.8, ib=ctx.createBuffer(2,len,ctx.sampleRate);
-  for(let c=0;c<2;c++){const d=ib.getChannelData(c);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.6)}
-  const verb=ctx.createConvolver();verb.buffer=ib;
-  const vg=ctx.createGain();vg.gain.value=.5;verb.connect(vg);vg.connect(gainNode);
-
-  const ch=[[['F',3],['A',3],['C',4],['F',4]],[['G',3],['B',3],['D',4],['G',4]],[['E',3],['G',3],['B',3],['E',4]],[['A',2],['C',4],['E',4],['A',4]]];
-  let i=0;
-  (function loop(){
-    if(!soundOn || audioCtx!==ctx) return;
-    const t=ctx.currentTime, bar=Math.floor(i/8)%4, k=i%8, c=ch[bar];
-    const seq=[0,1,2,3,2,1,2,3][k];
-    bgmNote(ctx,gainNode,verb,bgmHz(...c[seq])*(k>3?2:1),t,.55,k%2?.09:.13,3600);
-    if(k===0) bgmNote(ctx,gainNode,verb,bgmHz(c[0][0],2),t,1,.14,900);
-    i++;
-    setTimeout(loop,190);
-  })();
-}
-
-function stopSound(){
-  const ctx=audioCtx, g=gainNode;
-  if(!ctx) return;
-  audioCtx=null;
-  g.gain.cancelScheduledValues(ctx.currentTime);
-  g.gain.setValueAtTime(g.gain.value,ctx.currentTime);
-  g.gain.linearRampToValueAtTime(0,ctx.currentTime+1);
-  setTimeout(()=>{try{ctx.close()}catch(e){}},1200);
-}
-
-function toggleSound(){
-  soundOn = !soundOn;
-  document.getElementById('sound-icon').textContent = soundOn ? '♫' : '♪';
-  document.getElementById('sound-label').textContent = soundOn ? '환경음 끄기' : '환경음 켜기';
-  if(soundOn) startSound();
-  else stopSound();
-}
 
 // swipe support
 let touchStartX=0;
